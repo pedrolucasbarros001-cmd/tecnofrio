@@ -1,488 +1,590 @@
 'use client';
 
 import { useState } from 'react';
-import { servicos, tecnicos, marcasGarantia } from '@/lib/mock/data';
-import { Plus, Search, Filter, FileText, Printer, X, Calendar, User, Wrench, AlertCircle } from 'lucide-react';
+import { servicos, ServiceStatus, getStatusLabel, tecnicos } from '@/lib/mock/data';
+import { ServiceModal } from '@/components/tecnofrio/service-modal';
+import { Filter, Plus, X, Search, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function DonoServicosPage() {
+export default function DonoServicos() {
+  const [selectedService, setSelectedService] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<ServiceStatus | 'all'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createStep, setCreateStep] = useState<'tipo' | 'formulario'>('tipo');
-  const [tipoServico, setTipoServico] = useState<'visita' | 'oficina' | ''>('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('todos');
-  const [filterTecnico, setFilterTecnico] = useState('todos');
-
-  // Estado do formulário
-  const [formData, setFormData] = useState({
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+  const [newService, setNewService] = useState({
     cliente: '',
     nif: '',
     contato: '',
+    email: '',
     morada: '',
+    codigoPostal: '',
     aparelho: '',
+    marca: '',
     avaria: '',
+    tipo: 'visita' as 'visita' | 'oficina',
+    tecnico: '',
     urgente: false,
     garantia: false,
-    marcaGarantia: '',
-    processoGarantia: '',
-    marca: '',
-    tecnico: '',
-    dataAgendada: '',
-    turno: 'manha' as 'manha' | 'tarde'
+    garantiaMarca: '',
+    garantiaProcesso: ''
   });
 
-  const handleCreateService = () => {
-    // Simulação de criação de serviço
-    const novoServico = {
-      ...formData,
-      id: `${servicos.length + 1}`,
-      codigo: `TF-2024-${String(servicos.length + 1).padStart(3, '0')}`,
-      status: tipoServico === 'oficina' ? 'na_oficina' : 'por_fazer',
-      tipo: tipoServico,
-      tags: [
-        tipoServico === 'oficina' ? '⚙️ Oficina' : '🏠 Visita',
-        formData.urgente ? '🔴 Urgente' : '',
-        formData.garantia ? '🛡️ Garantia' : ''
-      ].filter(Boolean),
-      dataCriacao: new Date()
-    };
+  // Filtrar serviços por busca
+  const filteredServices = servicos.filter(s => {
+    const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
+    const matchesSearch = !searchQuery || 
+      s.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.codigo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.aparelho.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.contato.includes(searchQuery) ||
+      (s.nif && s.nif.includes(searchQuery)) ||
+      s.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesStatus && matchesSearch;
+  });
 
-    alert(`Serviço ${novoServico.codigo} criado com sucesso!`);
-    setShowCreateModal(false);
-    resetForm();
+  const statusOptions: Array<{ value: ServiceStatus | 'all'; label: string }> = [
+    { value: 'all', label: 'Todos' },
+    { value: 'por_fazer', label: '📋 Por Fazer' },
+    { value: 'em_execucao', label: '🔧 Em Execução' },
+    { value: 'na_oficina', label: '🏭 Na Oficina' },
+    { value: 'pedir_peca', label: '📦 Para Pedir Peça' },
+    { value: 'espera_peca', label: '⏳ Em Espera de Peça' },
+    { value: 'a_precificar', label: '💰 A Precificar' },
+    { value: 'entregas', label: '🚚 Entregas' },
+    { value: 'em_debito', label: '🧾 Em Débito' },
+    { value: 'pago', label: '✅ Pago' },
+    { value: 'finalizado', label: '🏁 Finalizado' },
+  ];
+
+  // Funções de calendário
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    return { daysInMonth, startingDayOfWeek, year, month };
   };
 
-  const resetForm = () => {
-    setCreateStep('tipo');
-    setTipoServico('');
-    setFormData({
-      cliente: '',
-      nif: '',
-      contato: '',
-      morada: '',
-      aparelho: '',
-      avaria: '',
-      urgente: false,
-      garantia: false,
-      marcaGarantia: '',
-      processoGarantia: '',
-      marca: '',
-      tecnico: '',
-      dataAgendada: '',
-      turno: 'manha'
+  const getServicesForDate = (date: Date) => {
+    return servicos.filter(s => {
+      if (!s.dataAgendada) return false;
+      return s.dataAgendada.toDateString() === date.toDateString();
     });
   };
 
-  // Filtros
-  const servicosFiltrados = servicos.filter(s => {
-    const matchSearch = s.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       s.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       s.aparelho.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = filterStatus === 'todos' || s.status === filterStatus;
-    const matchTecnico = filterTecnico === 'todos' || s.tecnico === filterTecnico;
-    return matchSearch && matchStatus && matchTecnico;
-  });
+  const changeMonth = (direction: 'prev' | 'next') => {
+    setCurrentDate(prev => {
+      const newDate = new Date(prev);
+      if (direction === 'prev') {
+        newDate.setMonth(newDate.getMonth() - 1);
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1);
+      }
+      return newDate;
+    });
+  };
+
+  const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentDate);
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+  const handleCreateService = () => {
+    if (!newService.codigoPostal || !newService.email) {
+      alert('Por favor, preencha o código postal e email (campos obrigatórios)');
+      return;
+    }
+    alert(`Serviço criado com sucesso!\nCliente: ${newService.cliente}\nTécnico: ${newService.tecnico || 'Não atribuído'}`);
+    setShowCreateModal(false);
+    setNewService({
+      cliente: '',
+      nif: '',
+      contato: '',
+      email: '',
+      morada: '',
+      codigoPostal: '',
+      aparelho: '',
+      marca: '',
+      avaria: '',
+      tipo: 'visita',
+      tecnico: '',
+      urgente: false,
+      garantia: false,
+      garantiaMarca: '',
+      garantiaProcesso: ''
+    });
+  };
 
   return (
     <div>
-      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">🗂️ Serviços</h1>
-          <p className="text-slate-400">Gestão completa de todos os serviços</p>
+          <h1 className="text-2xl font-bold text-slate-800 mb-1">Todos os Serviços</h1>
+          <p className="text-slate-500 text-sm">Gestão completa de serviços</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+          className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
           Criar Serviço
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 mb-6">
-        <div className="grid md:grid-cols-3 gap-4">
-          {/* Busca */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+      {/* Barra de Pesquisa e Filtros */}
+      <div className="bg-white rounded-xl p-4 mb-4 border border-slate-200 shadow-sm">
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por cliente, código..."
-              className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Pesquisar por cliente, código, aparelho, contacto, NIF, tags..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 text-slate-800 rounded-lg border border-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 text-sm"
             />
           </div>
-
-          {/* Filtro Status */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-          >
-            <option value="todos">Todos os Status</option>
-            <option value="por_fazer">Por Fazer</option>
-            <option value="em_execucao">Em Execução</option>
-            <option value="na_oficina">Na Oficina</option>
-            <option value="a_precificar">A Precificar</option>
-            <option value="entregas">Entregas</option>
-            <option value="em_debito">Em Débito</option>
-            <option value="pago">Pago</option>
-            <option value="finalizado">Finalizado</option>
-          </select>
-
-          {/* Filtro Técnico */}
-          <select
-            value={filterTecnico}
-            onChange={(e) => setFilterTecnico(e.target.value)}
-            className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-          >
-            <option value="todos">Todos os Técnicos</option>
-            {tecnicos.map(t => (
-              <option key={t.id} value={t.nome}>{t.nome}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as ServiceStatus | 'all')}
+              className="bg-slate-50 text-slate-800 px-3 py-2 rounded-lg border border-slate-200 focus:border-cyan-500 focus:outline-none text-sm"
+            >
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Tabela de Serviços */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-6">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-slate-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Código</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Cliente</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Aparelho</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Técnico</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Tags</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Ações</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Código</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Cliente</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Aparelho</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Status</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Técnico</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Tags</th>
+                <th className="text-left p-3 text-slate-600 font-semibold text-sm">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
-              {servicosFiltrados.map((service) => (
-                <tr key={service.id} className="hover:bg-slate-700/50 transition-colors">
-                  <td className="px-6 py-4 text-white font-medium">{service.codigo}</td>
-                  <td className="px-6 py-4 text-slate-300">{service.cliente}</td>
-                  <td className="px-6 py-4 text-slate-300">{service.aparelho}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs">
-                      {service.status.replace('_', ' ')}
+            <tbody>
+              {filteredServices.map((service) => (
+                <tr key={service.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
+                  <td className="p-3 text-slate-800 font-medium text-sm">{service.codigo}</td>
+                  <td className="p-3 text-slate-600 text-sm">{service.cliente}</td>
+                  <td className="p-3 text-slate-600 text-sm">{service.aparelho}</td>
+                  <td className="p-3">
+                    <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">
+                      {getStatusLabel(service.status)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-slate-300">{service.tecnico || 'Não atribuído'}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-1">
-                      {service.tags.slice(0, 2).map((tag, i) => (
-                        <span key={i} className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs">
+                  <td className="p-3 text-slate-600 text-sm">{service.tecnico || 'Não atribuído'}</td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1">
+                      {service.tags.slice(0, 2).map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-2 py-0.5 bg-cyan-50 text-cyan-600 rounded text-xs"
+                          title={tag}
+                        >
                           {tag}
                         </span>
                       ))}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => alert('Abrir ficha (simulado)')}
-                        className="p-2 hover:bg-slate-600 rounded-lg transition-colors"
-                        title="Abrir ficha"
-                      >
-                        <FileText className="w-4 h-4 text-slate-400" />
-                      </button>
-                      <button
-                        onClick={() => alert('Imprimir (simulado)')}
-                        className="p-2 hover:bg-slate-600 rounded-lg transition-colors"
-                        title="Imprimir"
-                      >
-                        <Printer className="w-4 h-4 text-slate-400" />
-                      </button>
-                    </div>
+                  <td className="p-3">
+                    <button
+                      onClick={() => setSelectedService(service)}
+                      className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-white text-xs font-medium transition-colors"
+                    >
+                      Abrir Ficha
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        {servicosFiltrados.length === 0 && (
-          <div className="text-center py-12 text-slate-500">
-            <p>Nenhum serviço encontrado</p>
-          </div>
-        )}
       </div>
 
-      {/* Modal de Criação */}
+      {/* Calendário/Agenda */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-slate-600" />
+            <h2 className="text-lg font-semibold text-slate-800">Agenda de Serviços</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => changeMonth('prev')}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4 text-slate-600" />
+            </button>
+            <span className="text-sm font-medium text-slate-700 min-w-[140px] text-center">
+              {monthNames[month]} {year}
+            </span>
+            <button
+              onClick={() => changeMonth('next')}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <ChevronRight className="w-4 h-4 text-slate-600" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="grid grid-cols-7 gap-2 mb-2">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+              <div key={day} className="text-center text-xs font-semibold text-slate-500 py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-2">
+            {Array.from({ length: startingDayOfWeek }).map((_, i) => (
+              <div key={`empty-${i}`} className="aspect-square" />
+            ))}
+            
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const date = new Date(year, month, day);
+              const servicesOnDay = getServicesForDate(date);
+              const isToday = date.toDateString() === new Date().toDateString();
+
+              return (
+                <div
+                  key={day}
+                  className={`aspect-square border rounded-lg p-1.5 hover:border-cyan-300 transition-colors ${
+                    isToday ? 'border-cyan-500 bg-cyan-50' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className={`text-xs font-medium mb-1 ${
+                    isToday ? 'text-cyan-600' : 'text-slate-600'
+                  }`}>
+                    {day}
+                  </div>
+                  {servicesOnDay.length > 0 && (
+                    <div className="space-y-0.5">
+                      {servicesOnDay.slice(0, 2).map(s => (
+                        <div
+                          key={s.id}
+                          className="text-[10px] bg-cyan-100 text-cyan-700 px-1 py-0.5 rounded truncate"
+                          title={`${s.codigo} - ${s.cliente}`}
+                        >
+                          {s.codigo}
+                        </div>
+                      ))}
+                      {servicesOnDay.length > 2 && (
+                        <div className="text-[9px] text-slate-500 text-center">
+                          +{servicesOnDay.length - 2}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Criação de Serviço */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-700">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 shadow-xl">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <h3 className="text-xl font-bold text-white">🧩 Criar Novo Serviço</h3>
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
+              <h3 className="text-xl font-bold text-slate-800">Criar Novo Serviço</h3>
               <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  resetForm();
-                }}
-                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                onClick={() => setShowCreateModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-slate-400" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
             {/* Conteúdo */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {/* Passo 1: Escolher Tipo */}
-              {createStep === 'tipo' && (
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-white mb-4">Escolha o tipo de serviço:</h4>
-                  
-                  <button
-                    onClick={() => {
-                      setTipoServico('visita');
-                      setCreateStep('formulario');
-                    }}
-                    className="w-full p-6 rounded-xl border-2 border-slate-700 bg-slate-900 hover:border-orange-500 transition-all text-left"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <span className="text-2xl">🏠</span>
-                      </div>
-                      <div>
-                        <h5 className="text-white font-semibold mb-1">Visita</h5>
-                        <p className="text-slate-400 text-sm">Serviço no local do cliente</p>
-                      </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="space-y-5">
+                {/* Informações do Cliente */}
+                <div>
+                  <h4 className="text-base font-semibold text-slate-700 mb-3">📋 Informações do Cliente</h4>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Nome do Cliente *
+                      </label>
+                      <input
+                        type="text"
+                        value={newService.cliente}
+                        onChange={(e) => setNewService({ ...newService, cliente: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                        placeholder="Nome completo"
+                        required
+                      />
                     </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setTipoServico('oficina');
-                      setCreateStep('formulario');
-                    }}
-                    className="w-full p-6 rounded-xl border-2 border-slate-700 bg-slate-900 hover:border-orange-500 transition-all text-left"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-orange-500/20 rounded-lg flex items-center justify-center">
-                        <span className="text-2xl">🏭</span>
-                      </div>
-                      <div>
-                        <h5 className="text-white font-semibold mb-1">Deixou na Oficina</h5>
-                        <p className="text-slate-400 text-sm">Cliente deixou equipamento para reparação</p>
-                      </div>
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        NIF
+                      </label>
+                      <input
+                        type="text"
+                        value={newService.nif}
+                        onChange={(e) => setNewService({ ...newService, nif: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 text-sm"
+                        placeholder="123456789"
+                      />
                     </div>
-                  </button>
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Contato *
+                      </label>
+                      <input
+                        type="tel"
+                        value={newService.contato}
+                        onChange={(e) => setNewService({ ...newService, contato: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                        placeholder="912345678"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Email *
+                      </label>
+                      <input
+                        type="email"
+                        value={newService.email}
+                        onChange={(e) => setNewService({ ...newService, email: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                        placeholder="email@exemplo.com"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Morada
+                      </label>
+                      <input
+                        type="text"
+                        value={newService.morada}
+                        onChange={(e) => setNewService({ ...newService, morada: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 text-sm"
+                        placeholder="Rua, número, cidade"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Código Postal *
+                      </label>
+                      <input
+                        type="text"
+                        value={newService.codigoPostal}
+                        onChange={(e) => setNewService({ ...newService, codigoPostal: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                        placeholder="1000-001"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {/* Passo 2: Formulário */}
-              {createStep === 'formulario' && (
-                <div className="space-y-6">
-                  <div className="flex items-center gap-2 mb-4">
+                {/* Informações do Equipamento */}
+                <div>
+                  <h4 className="text-base font-semibold text-slate-700 mb-3">🔧 Informações do Equipamento</h4>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Aparelho *
+                      </label>
+                      <input
+                        type="text"
+                        value={newService.aparelho}
+                        onChange={(e) => setNewService({ ...newService, aparelho: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                        placeholder="Ex: Ar Condicionado, Câmara Frigorífica"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Marca
+                      </label>
+                      <input
+                        type="text"
+                        value={newService.marca}
+                        onChange={(e) => setNewService({ ...newService, marca: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 text-sm"
+                        placeholder="Ex: Daikin, Mitsubishi"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Avaria Reportada *
+                      </label>
+                      <textarea
+                        value={newService.avaria}
+                        onChange={(e) => setNewService({ ...newService, avaria: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                        placeholder="Descreva o problema reportado pelo cliente"
+                        rows={3}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tipo de Serviço */}
+                <div>
+                  <h4 className="text-base font-semibold text-slate-700 mb-3">📦 Tipo de Serviço</h4>
+                  <div className="grid md:grid-cols-2 gap-3">
                     <button
-                      onClick={() => setCreateStep('tipo')}
-                      className="text-slate-400 hover:text-white transition-colors"
+                      onClick={() => setNewService({ ...newService, tipo: 'visita' })}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        newService.tipo === 'visita'
+                          ? 'border-cyan-500 bg-cyan-50'
+                          : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                      }`}
                     >
-                      ← Voltar
+                      <div className="text-center">
+                        <span className="text-2xl mb-1 block">🏠</span>
+                        <span className="text-slate-700 font-medium text-sm">Visita</span>
+                      </div>
                     </button>
-                    <span className="text-slate-500">|</span>
-                    <span className="text-white font-medium">
-                      {tipoServico === 'visita' ? '🏠 Visita' : '🏭 Oficina'}
-                    </span>
+                    <button
+                      onClick={() => setNewService({ ...newService, tipo: 'oficina' })}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        newService.tipo === 'oficina'
+                          ? 'border-cyan-500 bg-cyan-50'
+                          : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <span className="text-2xl mb-1 block">🏭</span>
+                        <span className="text-slate-700 font-medium text-sm">Oficina</span>
+                      </div>
+                    </button>
                   </div>
+                </div>
 
-                  {/* Dados do Cliente */}
-                  <div className="grid md:grid-cols-2 gap-4">
+                {/* Atribuição e Opções */}
+                <div>
+                  <h4 className="text-base font-semibold text-slate-700 mb-3">👤 Atribuição e Opções</h4>
+                  <div className="space-y-3">
                     <div>
-                      <label className="block text-white font-medium mb-2">Nome do Cliente *</label>
-                      <input
-                        type="text"
-                        value={formData.cliente}
-                        onChange={(e) => setFormData({ ...formData, cliente: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                        required
-                      />
+                      <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                        Atribuir Técnico
+                      </label>
+                      <select
+                        value={newService.tecnico}
+                        onChange={(e) => setNewService({ ...newService, tecnico: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm"
+                      >
+                        <option value="">Não atribuir agora</option>
+                        {tecnicos.map((tec) => (
+                          <option key={tec.id} value={tec.nome}>
+                            {tec.nome} {tec.online ? '🟢' : '⚫'}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <div>
-                      <label className="block text-white font-medium mb-2">NIF</label>
-                      <input
-                        type="text"
-                        value={formData.nif}
-                        onChange={(e) => setFormData({ ...formData, nif: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-white font-medium mb-2">Contato *</label>
-                      <input
-                        type="text"
-                        value={formData.contato}
-                        onChange={(e) => setFormData({ ...formData, contato: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                        required
-                      />
-                    </div>
-                    {tipoServico === 'visita' && (
-                      <div>
-                        <label className="block text-white font-medium mb-2">Morada *</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center space-x-2 cursor-pointer">
                         <input
-                          type="text"
-                          value={formData.morada}
-                          onChange={(e) => setFormData({ ...formData, morada: e.target.value })}
-                          className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                          required
+                          type="checkbox"
+                          checked={newService.urgente}
+                          onChange={(e) => setNewService({ ...newService, urgente: e.target.checked })}
+                          className="w-4 h-4 text-cyan-600 border-slate-300 rounded focus:ring-cyan-500"
                         />
+                        <span className="text-slate-700 font-medium text-sm">🔴 Urgente</span>
+                      </label>
+
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newService.garantia}
+                          onChange={(e) => setNewService({ ...newService, garantia: e.target.checked })}
+                          className="w-4 h-4 text-cyan-600 border-slate-300 rounded focus:ring-cyan-500"
+                        />
+                        <span className="text-slate-700 font-medium text-sm">🛡️ Garantia</span>
+                      </label>
+                    </div>
+
+                    {newService.garantia && (
+                      <div className="grid md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <div>
+                          <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                            Marca da Garantia
+                          </label>
+                          <input
+                            type="text"
+                            value={newService.garantiaMarca}
+                            onChange={(e) => setNewService({ ...newService, garantiaMarca: e.target.value })}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 text-sm"
+                            placeholder="Ex: Daikin"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-600 text-sm font-medium mb-1.5">
+                            Nº Processo
+                          </label>
+                          <input
+                            type="text"
+                            value={newService.garantiaProcesso}
+                            onChange={(e) => setNewService({ ...newService, garantiaProcesso: e.target.value })}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 text-sm"
+                            placeholder="GAR-2024-XXX"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
-
-                  {/* Dados do Equipamento */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-white font-medium mb-2">Tipo de Aparelho *</label>
-                      <input
-                        type="text"
-                        value={formData.aparelho}
-                        onChange={(e) => setFormData({ ...formData, aparelho: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                        placeholder="Ex: Ar Condicionado, Frigorífico..."
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-white font-medium mb-2">Marca</label>
-                      <input
-                        type="text"
-                        value={formData.marca}
-                        onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-white font-medium mb-2">Avaria Reportada *</label>
-                    <textarea
-                      value={formData.avaria}
-                      onChange={(e) => setFormData({ ...formData, avaria: e.target.value })}
-                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                      rows={3}
-                      required
-                    />
-                  </div>
-
-                  {/* Opções */}
-                  <div className="space-y-3">
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.urgente}
-                        onChange={(e) => setFormData({ ...formData, urgente: e.target.checked })}
-                        className="w-5 h-5 text-orange-600 border-slate-600 rounded focus:ring-orange-500 bg-slate-700"
-                      />
-                      <span className="text-white font-medium">🔴 Urgente</span>
-                    </label>
-
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.garantia}
-                        onChange={(e) => setFormData({ ...formData, garantia: e.target.checked })}
-                        className="w-5 h-5 text-orange-600 border-slate-600 rounded focus:ring-orange-500 bg-slate-700"
-                      />
-                      <span className="text-white font-medium">🛡️ É Garantia</span>
-                    </label>
-                  </div>
-
-                  {/* Campos de Garantia */}
-                  {formData.garantia && (
-                    <div className="bg-slate-900 rounded-lg p-4 space-y-4">
-                      <div>
-                        <label className="block text-white font-medium mb-2">Marca da Garantia *</label>
-                        <select
-                          value={formData.marcaGarantia}
-                          onChange={(e) => setFormData({ ...formData, marcaGarantia: e.target.value })}
-                          className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white"
-                          required
-                        >
-                          <option value="">Selecione...</option>
-                          {marcasGarantia.map(marca => (
-                            <option key={marca} value={marca}>{marca}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-white font-medium mb-2">Nº do Processo *</label>
-                        <input
-                          type="text"
-                          value={formData.processoGarantia}
-                          onChange={(e) => setFormData({ ...formData, processoGarantia: e.target.value })}
-                          className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white"
-                          placeholder="Ex: GAR-2024-001"
-                          required
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Atribuição */}
-                  <div>
-                    <label className="block text-white font-medium mb-2">Técnico Responsável</label>
-                    <select
-                      value={formData.tecnico}
-                      onChange={(e) => setFormData({ ...formData, tecnico: e.target.value })}
-                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                    >
-                      <option value="">Por atribuir</option>
-                      {tecnicos.map(t => (
-                        <option key={t.id} value={t.nome}>{t.nome}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Data e Turno */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-white font-medium mb-2">Data</label>
-                      <input
-                        type="date"
-                        value={formData.dataAgendada}
-                        onChange={(e) => setFormData({ ...formData, dataAgendada: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-white font-medium mb-2">Turno</label>
-                      <select
-                        value={formData.turno}
-                        onChange={(e) => setFormData({ ...formData, turno: e.target.value as 'manha' | 'tarde' })}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                      >
-                        <option value="manha">🌅 Manhã</option>
-                        <option value="tarde">🌆 Tarde</option>
-                      </select>
-                    </div>
-                  </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Footer */}
-            {createStep === 'formulario' && (
-              <div className="p-6 border-t border-slate-700">
-                <button
-                  onClick={handleCreateService}
-                  disabled={!formData.cliente || !formData.contato || !formData.aparelho || !formData.avaria}
-                  className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
-                >
-                  Criar Serviço
-                </button>
-              </div>
-            )}
+            <div className="p-5 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateService}
+                disabled={!newService.cliente || !newService.contato || !newService.email || !newService.codigoPostal || !newService.aparelho || !newService.avaria}
+                className="flex-1 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg font-medium transition-colors text-sm"
+              >
+                Criar Serviço
+              </button>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Serviço */}
+      {selectedService && (
+        <ServiceModal
+          service={selectedService}
+          onClose={() => setSelectedService(null)}
+          theme="light"
+        />
       )}
     </div>
   );

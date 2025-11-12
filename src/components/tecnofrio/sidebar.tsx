@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Home, LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,7 +18,6 @@ interface SidebarProps {
 
 export function Sidebar({ items, theme = 'dark', title, subtitle }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
   const isDark = theme === 'dark';
 

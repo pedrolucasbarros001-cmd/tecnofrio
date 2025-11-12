@@ -1,134 +1,127 @@
 'use client';
 
 import { useState } from 'react';
-import { tecnicos, servicos } from '@/lib/mock/data';
-import { User, Clock, CheckCircle, X } from 'lucide-react';
+import { tecnicos, getServicosByTecnico } from '@/lib/mock/data';
+import { ServiceModal } from '@/components/tecnofrio/service-modal';
 
-export default function DonoTecnicosPage() {
-  const [selectedTecnico, setSelectedTecnico] = useState<any>(null);
-  const [showModal, setShowModal] = useState(false);
+export default function DonoTecnicos() {
+  const [selectedTecnico, setSelectedTecnico] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<any>(null);
 
-  const handleVerServicos = (tecnico: any) => {
-    setSelectedTecnico(tecnico);
-    setShowModal(true);
-  };
-
-  const servicosDoTecnico = selectedTecnico
-    ? servicos.filter(s => s.tecnico === selectedTecnico.nome)
-    : [];
+  const tecnicoServices = selectedTecnico ? getServicosByTecnico(selectedTecnico) : [];
 
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">🧠 Monitor de Técnicos</h1>
-        <p className="text-slate-400">Acompanhamento de desempenho e serviços</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Monitor de Técnicos</h1>
+        <p className="text-slate-400">Acompanhamento em tempo real</p>
       </div>
 
       {/* Cards de Técnicos */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tecnicos.map((tecnico) => (
-          <div
-            key={tecnico.id}
-            className="bg-slate-800 border border-slate-700 rounded-xl p-6 hover:border-orange-500 transition-all cursor-pointer"
-            onClick={() => handleVerServicos(tecnico)}
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {tecnicos.map((tec) => (
+          <button
+            key={tec.id}
+            onClick={() => setSelectedTecnico(tec.nome)}
+            className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-amber-500 transition-all duration-300 text-left"
           >
-            {/* Header */}
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center">
-                  <User className="w-6 h-6 text-slate-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold">{tecnico.nome}</h3>
-                  <p className="text-slate-400 text-sm">{tecnico.especialidade}</p>
-                </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                {tec.nome.charAt(0)}
               </div>
-              <span className={`text-2xl ${tecnico.online ? '🟢' : '⚫'}`} />
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  tec.online ? 'bg-green-500 animate-pulse' : 'bg-slate-600'
+                }`}
+              />
             </div>
-
-            {/* Stats */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Status</span>
-                <span className={`font-medium ${tecnico.online ? 'text-green-400' : 'text-slate-500'}`}>
-                  {tecnico.online ? 'Online' : 'Offline'}
-                </span>
+            <h3 className="text-lg font-bold text-white mb-1">{tec.nome}</h3>
+            <p className="text-slate-400 text-sm mb-3">
+              {tec.online ? 'Online' : 'Offline'}
+            </p>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Serviços ativos:</span>
+                <span className="text-white font-bold">{tec.servicosAtivos}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Serviços Ativos</span>
-                <span className="text-white font-bold">{tecnico.servicosAtivos}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Tempo Médio</span>
-                <span className="text-white font-medium">{tecnico.tempoMedio}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Concluídos (mês)</span>
-                <span className="text-green-400 font-bold">{tecnico.concluidos}</span>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Tempo médio:</span>
+                <span className="text-white font-bold">{tec.tempoMedio}min</span>
               </div>
             </div>
-
-            {/* Botão */}
-            <button className="w-full mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm">
-              Ver Serviços
-            </button>
-          </div>
+          </button>
         ))}
       </div>
 
       {/* Modal de Serviços do Técnico */}
-      {showModal && selectedTecnico && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-700">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <div>
-                <h3 className="text-xl font-bold text-white">{selectedTecnico.nome}</h3>
-                <p className="text-slate-400 text-sm">{servicosDoTecnico.length} serviços ativos</p>
+      {selectedTecnico && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-slate-900 rounded-xl w-full max-w-3xl max-h-[80vh] overflow-hidden border border-slate-800">
+            <div className="p-6 border-b border-slate-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">{selectedTecnico}</h2>
+                  <p className="text-slate-400 mt-1">
+                    {tecnicoServices.length} serviços ativos
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedTecnico(null)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  Fechar
+                </button>
               </div>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
             </div>
-
-            {/* Lista de Serviços */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-4">
-                {servicosDoTecnico.map((service) => (
-                  <div
-                    key={service.id}
-                    className="bg-slate-900 rounded-lg p-4 border border-slate-700"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-white font-medium">{service.codigo}</span>
-                      <span className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs">
-                        {service.status.replace('_', ' ')}
-                      </span>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {tecnicoServices.length === 0 ? (
+                <p className="text-center text-slate-500 py-8">
+                  Nenhum serviço ativo
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {tecnicoServices.map((service) => (
+                    <div
+                      key={service.id}
+                      className="bg-slate-800 p-4 rounded-lg hover:bg-slate-750 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedService(service);
+                        setSelectedTecnico(null);
+                      }}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-white">{service.codigo}</h3>
+                          <p className="text-slate-400 text-sm mt-1">{service.cliente}</p>
+                          <p className="text-slate-500 text-sm">{service.aparelho}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {service.tags.map((tag: string) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-slate-300 text-sm mb-1">{service.cliente}</p>
-                    <p className="text-slate-400 text-sm">{service.aparelho}</p>
-                    <div className="flex gap-1 mt-2">
-                      {service.tags.map((tag, i) => (
-                        <span key={i} className="px-2 py-1 bg-slate-800 text-slate-400 rounded text-xs">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                {servicosDoTecnico.length === 0 && (
-                  <div className="text-center py-12 text-slate-500">
-                    <p>Nenhum serviço ativo</p>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Serviço */}
+      {selectedService && (
+        <ServiceModal
+          service={selectedService}
+          onClose={() => setSelectedService(null)}
+          theme="dark"
+        />
       )}
     </div>
   );

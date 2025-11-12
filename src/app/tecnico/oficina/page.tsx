@@ -37,7 +37,7 @@ export default function TecnicoOficinaPage() {
       setInqueritoStep('resultado');
     } else if (inqueritoStep === 'resultado' && inqueritoData.resultado) {
       if (inqueritoData.resultado === 'concluida') {
-        // Vai direto para A Precificar (sem perguntar pagamento)
+        // Finalizar manutenção - move para "A Precificar"
         setInqueritoStep('concluido');
         setTimeout(() => {
           alert('Serviço movido para "A Precificar"');
@@ -290,7 +290,7 @@ export default function TecnicoOficinaPage() {
                         <CheckCircle className="w-8 h-8 text-green-500" />
                         <div>
                           <h5 className="text-white font-semibold mb-1">✅ Concluída</h5>
-                          <p className="text-slate-400 text-sm">Reparação finalizada - vai para precificar</p>
+                          <p className="text-slate-400 text-sm">Reparação finalizada - enviar para precificar</p>
                         </div>
                       </div>
                     </button>
@@ -337,7 +337,6 @@ export default function TecnicoOficinaPage() {
                   </div>
                   <h4 className="text-2xl font-bold text-white mb-2">Reparação Registada!</h4>
                   <p className="text-slate-400">Serviço movido para A Precificar</p>
-                  <p className="text-slate-500 text-sm mt-2">O dono pode adicionar custos adicionais se necessário</p>
                 </div>
               )}
             </div>
@@ -354,7 +353,7 @@ export default function TecnicoOficinaPage() {
                   }
                   className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
                 >
-                  {inqueritoStep === 'resultado' && inqueritoData.resultado === 'concluida' ? 'Finalizar para Precificar' : 'Continuar'}
+                  Continuar
                 </button>
               </div>
             )}
